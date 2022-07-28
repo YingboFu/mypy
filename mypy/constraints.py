@@ -1,4 +1,4 @@
-"""Type inference constraints."""
+AA"""Type inference constraints."""
 
 from typing import TYPE_CHECKING, Iterable, List, Optional, Sequence
 
@@ -149,6 +149,7 @@ def infer_constraints(template: Type, actual: Type, direction: int) -> List[Cons
         res = _infer_constraints(template, actual, direction)
         TypeState._inferring.pop()
         return res
+    print(_infer_constraints(template, actual, direction))
     return _infer_constraints(template, actual, direction)
 
 
