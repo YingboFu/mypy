@@ -1,4 +1,4 @@
-AA"""Type inference constraints."""
+"""Type inference constraints."""
 
 from typing import TYPE_CHECKING, Iterable, List, Optional, Sequence
 
