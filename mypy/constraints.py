@@ -4,6 +4,8 @@ from typing import TYPE_CHECKING, Iterable, List, Optional, Sequence
 
 from typing_extensions import Final
 
+from mypy.nodes import Context
+
 import mypy.sametypes
 import mypy.subtypes
 import mypy.typeops
@@ -116,7 +118,6 @@ def infer_constraints_for_callable(
             )
             c = infer_constraints(callee.arg_types[i], actual_type, SUPERTYPE_OF)
             constraints.extend(c)
-
     return constraints
 
 
@@ -469,6 +470,7 @@ class ConstraintBuilderVisitor(TypeVisitor[List[Constraint]]):
     # Non-leaf types
 
     def visit_instance(self, template: Instance) -> List[Constraint]:
+        print("visit_instance Called!")
         original_actual = actual = self.actual
         res: List[Constraint] = []
         if isinstance(actual, (CallableType, Overloaded)) and template.type.is_protocol:
@@ -486,6 +488,7 @@ class ConstraintBuilderVisitor(TypeVisitor[List[Constraint]]):
                         subres = infer_constraints(call, actual, self.direction)
                         res.extend(subres)
                     template.type.inferring.pop()
+                    print("L{}: len: {}".format(489, len(res)))
                     return res
         if isinstance(actual, CallableType) and actual.fallback is not None:
             actual = actual.fallback
@@ -540,7 +543,8 @@ class ConstraintBuilderVisitor(TypeVisitor[List[Constraint]]):
                             res.append(Constraint(mapped_arg.id, SUPERTYPE_OF, suffix))
                     elif isinstance(tvar, TypeVarTupleType):
                         raise NotImplementedError
-
+                print("L{}: len: {}".format(544, len(res)))
+                print(res)
                 return res
             elif self.direction == SUPERTYPE_OF and instance.type.has_base(template.type.fullname):
                 mapped = map_instance_to_supertype(instance, template.type)
@@ -622,6 +626,8 @@ class ConstraintBuilderVisitor(TypeVisitor[List[Constraint]]):
                             res.append(Constraint(template_arg.id, SUPERTYPE_OF, suffix))
                         elif isinstance(suffix, ParamSpecType):
                             res.append(Constraint(template_arg.id, SUPERTYPE_OF, suffix))
+                print("L{}: len: {}".format(626, len(res)))
+                print(res)
                 return res
             if (
                 template.type.is_protocol
@@ -645,6 +651,7 @@ class ConstraintBuilderVisitor(TypeVisitor[List[Constraint]]):
                     )
                 )
                 template.type.inferring.pop()
+                print("L{}: len: {}".format(650, len(res)))
                 return res
             elif (
                 instance.type.is_protocol
@@ -661,8 +668,11 @@ class ConstraintBuilderVisitor(TypeVisitor[List[Constraint]]):
                     )
                 )
                 instance.type.inferring.pop()
+                print("L{}: len: {}".format(667, len(res)))
                 return res
         if isinstance(actual, AnyType):
+            print("L{}: len: {}".format(670, len(self.infer_against_any(template.args, actual))))
+            print(self.infer_against_any(template.args, actual))
             return self.infer_against_any(template.args, actual)
         if (
             isinstance(actual, TupleType)
@@ -672,14 +682,22 @@ class ConstraintBuilderVisitor(TypeVisitor[List[Constraint]]):
             for item in actual.items:
                 cb = infer_constraints(template.args[0], item, SUPERTYPE_OF)
                 res.extend(cb)
+            print("L{}: len: {}".format(681, len(res)))
+            print(res)
             return res
         elif isinstance(actual, TupleType) and self.direction == SUPERTYPE_OF:
+            print("L{}: len: {}".format(684, len(infer_constraints(template, mypy.typeops.tuple_fallback(actual), self.direction))))
+            print(infer_constraints(template, mypy.typeops.tuple_fallback(actual), self.direction))
             return infer_constraints(template, mypy.typeops.tuple_fallback(actual), self.direction)
         elif isinstance(actual, TypeVarType):
             if not actual.values:
+                print("L{}: len: {}".format(689, len(infer_constraints(template, actual.upper_bound, self.direction))))
+                print(infer_constraints(template, actual.upper_bound, self.direction))
                 return infer_constraints(template, actual.upper_bound, self.direction)
             return []
         elif isinstance(actual, ParamSpecType):
+            print("L{}: len: {}".format(695, len(infer_constraints(template, actual.upper_bound, self.direction))))
+            print(infer_constraints(template, actual.upper_bound, self.direction))
             return infer_constraints(template, actual.upper_bound, self.direction)
         elif isinstance(actual, TypeVarTupleType):
             raise NotImplementedError
@@ -710,6 +728,7 @@ class ConstraintBuilderVisitor(TypeVisitor[List[Constraint]]):
         return res
 
     def visit_callable_type(self, template: CallableType) -> List[Constraint]:
+        print("visit_callable_type called!")
         if isinstance(self.actual, CallableType):
             res: List[Constraint] = []
             cactual = self.actual
@@ -768,6 +787,8 @@ class ConstraintBuilderVisitor(TypeVisitor[List[Constraint]]):
                 cactual_ret_type = cactual.type_guard
 
             res.extend(infer_constraints(template_ret_type, cactual_ret_type, self.direction))
+            print("L{}: len: {}".format(786, len(res)))
+            print(res)
             return res
         elif isinstance(self.actual, AnyType):
             param_spec = template.param_spec()
@@ -784,10 +805,16 @@ class ConstraintBuilderVisitor(TypeVisitor[List[Constraint]]):
                     )
                 ]
             res.extend(infer_constraints(template.ret_type, any_type, self.direction))
+            print("L{}: len: {}".format(804, len(res)))
+            print(res)
             return res
         elif isinstance(self.actual, Overloaded):
+            print("L{}: len: {}".format(808, len(self.infer_against_overloaded(self.actual, template))))
+            print(self.infer_against_overloaded(self.actual, template))
             return self.infer_against_overloaded(self.actual, template)
         elif isinstance(self.actual, TypeType):
+            print("L{}: len: {}".format(812, len(infer_constraints(template.ret_type, self.actual.item, self.direction))))
+            print(infer_constraints(template.ret_type, self.actual.item, self.direction))
             return infer_constraints(template.ret_type, self.actual.item, self.direction)
         elif isinstance(self.actual, Instance):
             # Instances with __call__ method defined are considered structural
@@ -796,6 +823,8 @@ class ConstraintBuilderVisitor(TypeVisitor[List[Constraint]]):
                 "__call__", self.actual, self.actual, is_operator=True
             )
             if call:
+                print("L{}: len: {}".format(822, len(infer_constraints(template, call, self.direction))))
+                print(infer_constraints(template, call, self.direction))
                 return infer_constraints(template, call, self.direction)
             else:
                 return []
@@ -814,6 +843,7 @@ class ConstraintBuilderVisitor(TypeVisitor[List[Constraint]]):
         return infer_constraints(template, item, self.direction)
 
     def visit_tuple_type(self, template: TupleType) -> List[Constraint]:
+        print("visit_tuple_type called")
         actual = self.actual
         # TODO: Support subclasses of Tuple
         is_varlength_tuple = (
@@ -848,6 +878,10 @@ class ConstraintBuilderVisitor(TypeVisitor[List[Constraint]]):
                             len(template.items) - unpack_index - 1,
                         )
                         modified_actual = actual.copy_modified(items=list(actual_items))
+                    print("L{}".format(877))
+                    print(len([Constraint(type_var=unpacked_type.id, op=self.direction, target=modified_actual)]))
+                    print(Constraint(type_var=unpacked_type.id, op=self.direction, target=modified_actual))
+                    print(Constraint(type_var=unpacked_type.id, op=self.direction, target=modified_actual))
                     return [
                         Constraint(
                             type_var=unpacked_type.id, op=self.direction, target=modified_actual
@@ -858,13 +892,18 @@ class ConstraintBuilderVisitor(TypeVisitor[List[Constraint]]):
             res: List[Constraint] = []
             for i in range(len(template.items)):
                 res.extend(infer_constraints(template.items[i], actual.items[i], self.direction))
+            print("L{}: len: {}".format(891, len(res)))
+            print(res)
             return res
         elif isinstance(actual, AnyType):
+            print("L{}: len: {}".format(895, len(self.infer_against_any(template.items, actual))))
+            print(self.infer_against_any(template.items, actual))
             return self.infer_against_any(template.items, actual)
         else:
             return []
 
     def visit_typeddict_type(self, template: TypedDictType) -> List[Constraint]:
+        print("visit_typeddict_type called")
         actual = self.actual
         if isinstance(actual, TypedDictType):
             res: List[Constraint] = []
@@ -872,8 +911,12 @@ class ConstraintBuilderVisitor(TypeVisitor[List[Constraint]]):
             #       elsewhere so this shouldn't be unsafe.
             for (item_name, template_item_type, actual_item_type) in template.zip(actual):
                 res.extend(infer_constraints(template_item_type, actual_item_type, self.direction))
+            print("L{}: len: {}".format(910, len(res)))
+            print(res)
             return res
         elif isinstance(actual, AnyType):
+            print("L{}: len: {}".format(914, len(self.infer_against_any(template.items.values(), actual))))
+            print(self.infer_against_any(template.items.values(), actual))
             return self.infer_against_any(template.items.values(), actual)
         else:
             return []
@@ -904,6 +947,8 @@ class ConstraintBuilderVisitor(TypeVisitor[List[Constraint]]):
         res: List[Constraint] = []
         for t in items:
             res.extend(infer_constraints(t, self.actual, self.direction))
+        print("L{}: len: {}".format(946, len(res)))
+        print(res)
         return res
 
     def visit_type_type(self, template: TypeType) -> List[Constraint]:
