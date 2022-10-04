@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, Iterable, List, Optional, Sequence
 
 from typing_extensions import Final
 
+import inspect
 import mypy.sametypes
 import mypy.subtypes
 import mypy.typeops
@@ -75,12 +76,36 @@ class Constraint:
         self.type_var = type_var
         self.op = op
         self.target = target
+        self.file = ""      # file name
+        self.line = -1
+        self.column = -1
+        self.end_line = None
+        self.end_column = None
+        self.var_name = ""
+        self.fname = ""     # callee name
+
+        cur = inspect.currentframe()
+        outer = inspect.getouterframes(cur, 2)
+        for frame in outer:
+            if frame.function.startswith("check_"):
+                if "context" in frame.frame.f_locals:
+                    self.line = frame.frame.f_locals['context'].line
+                    self.column = frame.frame.f_locals['context'].column
+                    self.end_line = frame.frame.f_locals['context'].end_line
+                    self.end_column = frame.frame.f_locals['context'].end_column
+                    if self.line != -1:
+                        break
+        for frame in outer:
+            if frame.function == "type_check_first_pass":
+                self.file = frame.frame.f_locals['self'].abspath
 
     def __repr__(self) -> str:
         op_str = "<:"
         if self.op == SUPERTYPE_OF:
             op_str = ":>"
-        return f"{self.type_var} {op_str} {self.target}"
+        if self.end_line is None or self.line == self.end_line:
+            return f"{self.line}: {self.type_var} {op_str} {self.target}"
+        return f"{self.line}-{self.end_line}: {self.type_var} {op_str} {self.target}"
 
     def __hash__(self) -> int:
         return hash((self.type_var, self.op, self.target))

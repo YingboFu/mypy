@@ -1,5 +1,6 @@
 """Mypy type checker."""
-
+import ast
+from mypy import infer
 import fnmatch
 import itertools
 from collections import defaultdict
@@ -214,6 +215,7 @@ from mypy.util import is_dunder, is_sunder, is_typeshed_file
 from mypy.visitor import NodeVisitor
 
 T = TypeVar("T")
+related_variable_list = []
 
 DEFAULT_LAST_PASS: Final = 1  # Pass numbers start at 0
 
@@ -2464,6 +2466,36 @@ class TypeChecker(NodeVisitor[None], CheckerPluginInterface):
         # Avoid type checking type aliases in stubs to avoid false
         # positives about modern type syntax available in stubs such
         # as X | Y.
+        var_list = []
+        for lv in s.lvalues:
+            if isinstance(lv, NameExpr):
+                var_list.append(lv)
+        if isinstance(s.rvalue, NameExpr):
+            var_list.append(s.rvalue)
+        if isinstance(s.rvalue, CallExpr):
+            for a in s.rvalue.args:
+                if isinstance(a, NameExpr):
+                    var_list.append(a)
+                elif isinstance(a, OpExpr):
+                    if isinstance(a.left, NameExpr):
+                        var_list.append(a.left)
+                    if isinstance(a.right, NameExpr):
+                        var_list.append(a.right)
+                elif isinstance(a, CallExpr):
+                    for a in s.rvalue.args:
+                        if isinstance(a, NameExpr):
+                            var_list.append(a)
+                        elif isinstance(a, OpExpr):
+                            if isinstance(a.left, NameExpr):
+                                var_list.append(a.left)
+                            if isinstance(a.right, NameExpr):
+                                var_list.append(a.right)
+        if isinstance(s.rvalue, OpExpr):
+            if isinstance(s.rvalue.left, NameExpr):
+                var_list.append(s.rvalue.left)
+            if isinstance(s.rvalue.right, NameExpr):
+                var_list.append(s.rvalue.right)
+        related_variable_list.append(var_list)
         if not (s.is_alias_def and self.is_stub):
             with self.enter_final_context(s.is_final_def):
                 self.check_assignment(s.lvalues[-1], s.rvalue, s.type is None, s.new_syntax)

@@ -12,6 +12,7 @@ from mypy.nodes import ArgKind
 from mypy.solve import solve_constraints
 from mypy.types import CallableType, Instance, Type, TypeVarId
 
+typeIslands = []
 
 class ArgumentInferContext(NamedTuple):
     """Type argument inference context.
@@ -52,7 +53,7 @@ def infer_function_type_arguments(
     constraints = infer_constraints_for_callable(
         callee_type, arg_types, arg_kinds, formal_to_actual, context
     )
-
+    typeIslands.append(constraints)
     # Solve constraints.
     type_vars = callee_type.type_var_ids()
     return solve_constraints(type_vars, constraints, strict)
@@ -64,4 +65,5 @@ def infer_type_arguments(
     # Like infer_function_type_arguments, but only match a single type
     # against a generic type.
     constraints = infer_constraints(template, actual, SUPERTYPE_OF if is_supertype else SUBTYPE_OF)
+    typeIslands.append(constraints)
     return solve_constraints(type_var_ids, constraints)

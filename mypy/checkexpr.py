@@ -8,6 +8,7 @@ from typing_extensions import ClassVar, Final, TypeAlias as _TypeAlias, overload
 
 import mypy.checker
 import mypy.errorcodes as codes
+import inspect
 from mypy import applytype, erasetype, join, message_registry, nodes, operators, types
 from mypy.argmap import ArgTypeExpander, map_actuals_to_formals, map_formals_to_actuals
 from mypy.backports import OrderedDict
@@ -155,6 +156,8 @@ from mypy.types import (
 from mypy.typevars import fill_typevars
 from mypy.util import split_module_names
 from mypy.visitor import ExpressionVisitor
+
+callExpMap = {} # {(fileName, line): functionName}
 
 # Type of callback user for checking individual function arguments. See
 # check_args() below for details.
@@ -1043,6 +1046,16 @@ class ExpressionChecker(ExpressionVisitor[Type]):
         'callable_name' using 'object_type' (the base type on which the method is called),
         for example 'typing.Mapping.get'.
         """
+
+        fileName = ""
+        cur = inspect.currentframe()
+        outer = inspect.getouterframes(cur, 2)
+        for frame in outer:
+            if frame.function == "type_check_first_pass":
+                fileName = frame.frame.f_locals['self'].abspath
+        if hasattr(e.callee, "name"):
+            callExpMap[(fileName, e.line, e.end_line)] = e.callee.name
+
         if callable_name is None and member is not None:
             assert object_type is not None
             callable_name = self.method_fullname(object_type, member)

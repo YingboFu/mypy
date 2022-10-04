@@ -6,6 +6,7 @@ from typing import Callable, Dict, List, Optional, Set, TextIO, Tuple, TypeVar, 
 
 from typing_extensions import Final, Literal, NoReturn
 
+from mypy import infer
 from mypy import errorcodes as codes
 from mypy.backports import OrderedDict
 from mypy.errorcodes import IMPORT, ErrorCode
@@ -23,6 +24,7 @@ allowed_duplicates: Final = ["@overload", "Got:", "Expected:"]
 # This is used to give notes about out-of-date "type: ignore" comments.
 original_error_codes: Final = {codes.LITERAL_REQ: codes.MISC}
 
+errorLoc = []      # [(fileName, line)]
 
 class ErrorInfo:
     """Representation of a single error message."""
@@ -790,6 +792,9 @@ class Errors:
                     if end_line == line and end_column > column:
                         marker = f'^{"~" * (end_column - column - 1)}'
                     a.append(" " * (DEFAULT_SOURCE_OFFSET + column) + marker)
+        for e in errors:
+            errorLoc.append((e[0], e[1]))
+
         return a
 
     def file_messages(self, path: str) -> List[str]:

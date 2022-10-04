@@ -3,10 +3,13 @@ import re
 import sys
 import typing  # for typing.Type, which conflicts with types.Type
 import warnings
+import inspect
+from mypy import infer
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, TypeVar, Union, cast
 
 from typing_extensions import Final, Literal, overload
 
+from mypy import constraints
 from mypy import defaults, errorcodes as codes, message_registry
 from mypy.errors import Errors
 from mypy.nodes import (
@@ -110,6 +113,7 @@ from mypy.types import (
     TupleType,
     Type,
     TypeList,
+    TypeVarId,
     TypeOfAny,
     UnboundType,
     UnionType,
@@ -235,6 +239,8 @@ except ImportError:
             file=sys.stderr,
         )
     sys.exit(1)
+
+funcs = []  # [(file, line, endLine)]
 
 N = TypeVar("N", bound=Node)
 
@@ -949,8 +955,33 @@ class ASTConverter:
                 self.errors, line=n.returns.lineno if n.returns else lineno
             ).visit(n.returns)
 
+        c_list = []
+        file = ""
+        cur = inspect.currentframe()
+        outer = inspect.getouterframes(cur, 2)
+        for frame in outer:
+            if frame.function == "parse":
+                file = frame.frame.f_locals['fnam']
+                funcs.append((file, n.lineno, n.end_lineno))
         for arg, arg_type in zip(args, arg_types):
             self.set_type_optional(arg_type, arg.initializer)
+            if arg_type is not None:
+                tid = TypeVarId.new(0)
+                c2 = constraints.Constraint(tid, constraints.SUBTYPE_OF, arg_type)
+                setattr(c2, "line", lineno)
+                setattr(c2, "var_name", arg.variable.name)
+                setattr(c2, "fname", n.name)
+                setattr(c2, "file", file)
+                c_list.append(c2)
+
+        if return_type is not None:
+            tid = TypeVarId.new(0)
+            c2 = constraints.Constraint(tid, constraints.SUBTYPE_OF, return_type)
+            setattr(c2, "line", return_type.line)
+            c_list.append(c2)
+
+        if c_list:
+            infer.typeIslands.append(c_list)
 
         func_type = None
         if any(arg_types) or return_type:
@@ -1156,6 +1187,33 @@ class ASTConverter:
         lvalues = self.translate_expr_list(n.targets)
         rvalue = self.visit(n.value)
         typ = self.translate_type_comment(n, n.type_comment)
+        c_list = []
+        file = ""
+        cur = inspect.currentframe()
+        outer = inspect.getouterframes(cur, 2)
+        for frame in outer:
+            if frame.function == "parse":
+                file = frame.frame.f_locals['fnam']
+        if typ is not None:
+            if hasattr(lvalues[0], "name"):
+                tid = TypeVarId.new(0)
+                c2 = constraints.Constraint(tid, constraints.SUBTYPE_OF, typ)
+                setattr(c2, "line", typ.line)
+                setattr(c2, "var_name", lvalues[0].name)
+                setattr(c2, "file", file)
+                c_list.append(c2)
+                infer.typeIslands.append(c_list)
+            else:
+                if hasattr(typ, "name"):
+                    if typ.name == "Tuple" and len(lvalues[0].items) == len(typ.args):
+                        for i in range(len(lvalues[0].items)):
+                            tid = TypeVarId.new(0)
+                            c2 = constraints.Constraint(tid, constraints.SUBTYPE_OF, typ.args[i])
+                            setattr(c2, "line", typ.line)
+                            setattr(c2, "var_name", lvalues[0].items[0].name)
+                            setattr(c2, "file", file)
+                            c_list.append(c2)
+                        infer.typeIslands.append(c_list)
         s = AssignmentStmt(lvalues, rvalue, type=typ, new_syntax=False)
         return self.set_line(s, n)
 
@@ -1172,6 +1230,21 @@ class ASTConverter:
         assert typ is not None
         typ.column = n.annotation.col_offset
         s = AssignmentStmt([self.visit(n.target)], rvalue, type=typ, new_syntax=True)
+        c_list = []
+        file = ""
+        cur = inspect.currentframe()
+        outer = inspect.getouterframes(cur, 2)
+        for frame in outer:
+            if frame.function == "parse":
+                file = frame.frame.f_locals['fnam']
+        tid = TypeVarId.new(0)
+        c2 = constraints.Constraint(tid, constraints.SUBTYPE_OF, typ)
+        setattr(c2, "line", typ.line)
+        if hasattr(s.lvalues[0], "name"):
+            setattr(c2, "var_name", s.lvalues[0].name)
+        setattr(c2, "file", file)
+        c_list.append(c2)
+        infer.typeIslands.append(c_list)
         return self.set_line(s, n)
 
     # AugAssign(expr target, operator op, expr value)
